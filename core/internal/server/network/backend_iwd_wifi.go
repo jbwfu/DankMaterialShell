@@ -2,6 +2,8 @@ package network
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/AvengeMedia/DankMaterialShell/core/internal/errdefs"
@@ -708,6 +710,100 @@ func (b *IWDBackend) ForgetWiFiNetwork(ssid string) error {
 	}
 
 	return fmt.Errorf("network not found")
+}
+
+func (b *IWDBackend) UpdateWiFiConfig(update WiFiConfigUpdate) error {
+	if update.SSID == "" {
+		return fmt.Errorf("ssid is required")
+	}
+	if update.Proxy != nil || update.IP != nil {
+		return fmt.Errorf("WiFi proxy and IP configuration are not supported by iwd backend yet")
+	}
+	if update.Credentials == nil || update.Credentials.Password == nil {
+		return fmt.Errorf("password is required for iwd WiFi credentials update")
+	}
+	if update.Credentials.Username != nil || update.Credentials.AnonymousIdentity != nil || update.Credentials.DomainSuffixMatch != nil {
+		return fmt.Errorf("enterprise WiFi credential update is not supported by iwd backend")
+	}
+
+	path := iwdConfigPath(update.SSID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read iwd network config: %w", err)
+	}
+
+	updated, err := replaceIWDPassphrase(string(data), *update.Credentials.Password)
+	if err != nil {
+		return err
+	}
+
+	info, statErr := os.Stat(path)
+	mode := os.FileMode(0600)
+	if statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	if err := os.WriteFile(path, []byte(updated), mode); err != nil {
+		return fmt.Errorf("failed to update iwd network password: %w", err)
+	}
+
+	if err := b.updateState(); err != nil {
+		return fmt.Errorf("failed to refresh iwd state after WiFi config update: %w", err)
+	}
+
+	if b.onStateChange != nil {
+		b.onStateChange()
+	}
+
+	return nil
+}
+
+func replaceIWDPassphrase(data string, passphrase string) (string, error) {
+	lines := strings.Split(data, "\n")
+	inSecurity := false
+	insertAt := -1
+	passphraseIndex := -1
+	filtered := make([]string, 0, len(lines))
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "[Security]":
+			inSecurity = true
+			insertAt = len(filtered) + 1
+			filtered = append(filtered, line)
+		case strings.HasPrefix(trimmed, "["):
+			if inSecurity {
+				if passphraseIndex == -1 {
+					filtered = append(filtered, "Passphrase="+passphrase)
+				}
+				filtered = append(filtered, lines[i:]...)
+				return strings.Join(filtered, "\n"), nil
+			}
+			inSecurity = false
+			filtered = append(filtered, line)
+		case inSecurity && strings.HasPrefix(trimmed, "Passphrase="):
+			passphraseIndex = len(filtered)
+			filtered = append(filtered, "Passphrase="+passphrase)
+		case inSecurity && strings.HasPrefix(trimmed, "PreSharedKey="):
+			continue
+		default:
+			filtered = append(filtered, line)
+		}
+	}
+
+	if inSecurity {
+		if passphraseIndex == -1 {
+			if insertAt >= 0 && insertAt <= len(filtered) {
+				filtered = append(filtered[:insertAt], append([]string{"Passphrase=" + passphrase}, filtered[insertAt:]...)...)
+			} else {
+				filtered = append(filtered, "Passphrase="+passphrase)
+			}
+		}
+		return strings.Join(filtered, "\n"), nil
+	}
+
+	return "", fmt.Errorf("iwd network config has no [Security] section")
 }
 
 func (b *IWDBackend) SetWiFiAutoconnect(ssid string, autoconnect bool) error {

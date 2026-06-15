@@ -136,6 +136,10 @@ func (b *HybridIwdNetworkdBackend) ForgetWiFiNetwork(ssid string) error {
 	return b.wifi.ForgetWiFiNetwork(ssid)
 }
 
+func (b *HybridIwdNetworkdBackend) UpdateWiFiConfig(update WiFiConfigUpdate) error {
+	return b.wifi.UpdateWiFiConfig(update)
+}
+
 func (b *HybridIwdNetworkdBackend) GetWiredConnections() ([]WiredConnection, error) {
 	return b.l3.GetWiredConnections()
 }

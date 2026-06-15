@@ -34,6 +34,10 @@ func (b *SystemdNetworkdBackend) ForgetWiFiNetwork(ssid string) error {
 	return fmt.Errorf("WiFi forget not supported by networkd backend")
 }
 
+func (b *SystemdNetworkdBackend) UpdateWiFiConfig(update WiFiConfigUpdate) error {
+	return fmt.Errorf("WiFi configuration not supported by networkd backend")
+}
+
 func (b *SystemdNetworkdBackend) ListVPNProfiles() ([]VPNProfile, error) {
 	return []VPNProfile{}, nil
 }

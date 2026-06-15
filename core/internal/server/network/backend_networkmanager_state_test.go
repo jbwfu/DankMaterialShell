@@ -68,6 +68,29 @@ func TestNetworkManagerBackend_ClassifyNMStateReason(t *testing.T) {
 	}
 }
 
+func TestShouldForgetFailedWiFiProfile(t *testing.T) {
+	testCases := []struct {
+		name        string
+		reasonCode  string
+		preExisting bool
+		expected    bool
+	}{
+		{"new profile bad credentials", errdefs.ErrBadCredentials, false, true},
+		{"saved profile bad credentials", errdefs.ErrBadCredentials, true, false},
+		{"new profile missing SSID", errdefs.ErrNoSuchSSID, false, true},
+		{"saved profile missing SSID", errdefs.ErrNoSuchSSID, true, false},
+		{"user cancel always clears", errdefs.ErrUserCanceled, true, true},
+		{"dhcp failure keeps new profile", errdefs.ErrDhcpTimeout, false, false},
+		{"generic failure keeps new profile", errdefs.ErrConnectionFailed, false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, shouldForgetFailedWiFiProfile(tc.reasonCode, tc.preExisting))
+		})
+	}
+}
+
 func TestNetworkManagerBackend_GetDeviceIP_NoConfig(t *testing.T) {
 	mockNM := mock_gonetworkmanager.NewMockNetworkManager(t)
 	mockDevice := mock_gonetworkmanager.NewMockDevice(t)

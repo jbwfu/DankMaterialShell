@@ -61,6 +61,10 @@ Singleton {
     property bool autoRefreshEnabled: activeService?.autoRefreshEnabled ?? false
     property string wifiPassword: activeService?.wifiPassword ?? ""
     property string forgetSSID: activeService?.forgetSSID ?? ""
+    property bool wifiConfigUpdating: activeService?.wifiConfigUpdating ?? false
+    property string wifiConfigUpdateSSID: activeService?.wifiConfigUpdateSSID ?? ""
+    readonly property bool supportsHiddenWifiConnect: activeService?.supportsHiddenWifiConnect ?? false
+    readonly property bool supportsWifiAutoconnect: activeService?.supportsWifiAutoconnect ?? false
 
     property string networkInfoSSID: activeService?.networkInfoSSID ?? ""
     property string networkInfoDetails: activeService?.networkInfoDetails ?? ""
@@ -187,9 +191,9 @@ Singleton {
         }
     }
 
-    function connectToWifi(ssid, password = "", username = "", anonymousIdentity = "", domainSuffixMatch = "") {
+    function connectToWifi(ssid, password = "", username = "", anonymousIdentity = "", domainSuffixMatch = "", hidden = false) {
         if (activeService && activeService.connectToWifi) {
-            activeService.connectToWifi(ssid, password, username, anonymousIdentity, domainSuffixMatch);
+            activeService.connectToWifi(ssid, password, username, anonymousIdentity, domainSuffixMatch, hidden);
         }
     }
 
@@ -202,6 +206,12 @@ Singleton {
     function forgetWifiNetwork(ssid) {
         if (activeService && activeService.forgetWifiNetwork) {
             activeService.forgetWifiNetwork(ssid);
+        }
+    }
+
+    function updateWifiConfig(ssid, config) {
+        if (activeService && activeService.updateWifiConfig) {
+            activeService.updateWifiConfig(ssid, config);
         }
     }
 
@@ -229,10 +239,16 @@ Singleton {
         }
     }
 
-    function connectToWifiAndSetPreference(ssid, password, username = "", anonymousIdentity = "", domainSuffixMatch = "") {
+    function connectToWifiAndSetPreference(ssid, password, username = "", anonymousIdentity = "", domainSuffixMatch = "", hidden = false) {
         if (activeService && activeService.connectToWifiAndSetPreference) {
-            activeService.connectToWifiAndSetPreference(ssid, password, username, anonymousIdentity, domainSuffixMatch);
+            activeService.connectToWifiAndSetPreference(ssid, password, username, anonymousIdentity, domainSuffixMatch, hidden);
         }
+    }
+
+    function canEditWifiCredentials(network) {
+        if (activeService && activeService.canEditWifiCredentials)
+            return activeService.canEditWifiCredentials(network);
+        return false;
     }
 
     function toggleNetworkConnection(type) {

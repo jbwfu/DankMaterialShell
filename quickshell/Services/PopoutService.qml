@@ -763,6 +763,16 @@ Singleton {
         }
     }
 
+    function showWifiEditModalForNetwork(network) {
+        if (wifiPasswordModalLoader)
+            wifiPasswordModalLoader.active = true;
+        if (wifiPasswordModal) {
+            wifiPasswordModal.showEditForNetwork(network);
+        } else {
+            Qt.callLater(() => wifiPasswordModal?.showEditForNetwork(network));
+        }
+    }
+
     function showWifiQRCodeModal(ssid) {
         if (wifiQRCodeModalLoader)
             wifiQRCodeModalLoader.active = true;
@@ -771,6 +781,8 @@ Singleton {
     }
 
     function showHiddenNetworkModal() {
+        if (!NetworkService.supportsHiddenWifiConnect)
+            return;
         if (wifiPasswordModalLoader)
             wifiPasswordModalLoader.active = true;
         if (wifiPasswordModal) {

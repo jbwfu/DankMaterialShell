@@ -174,6 +174,8 @@ Singleton {
     property string wifiPassword: ""
     property string forgetSSID: ""
     property int refCount: 0
+    readonly property bool supportsHiddenWifiConnect: false
+    readonly property bool supportsWifiAutoconnect: false
 
     property string networkInfoSSID: ""
     property string networkInfoDetails: ""
@@ -342,7 +344,7 @@ Singleton {
         _pendingWithPsk = false;
     }
 
-    function connectToWifi(ssid, password = "", username = "", anonymousIdentity = "", domainSuffixMatch = "") {
+    function connectToWifi(ssid, password = "", username = "", anonymousIdentity = "", domainSuffixMatch = "", hidden = false) {
         if (isConnecting) {
             return;
         }
@@ -402,6 +404,10 @@ Singleton {
         forgetSSID = "";
     }
 
+    function updateWifiConfig(ssid, config) {
+        ToastService.showError(I18n.tr("WiFi settings require DMS network service"));
+    }
+
     function toggleWifiRadio() {
         if (wifiToggling) {
             return;
@@ -459,9 +465,13 @@ Singleton {
         }
     }
 
-    function connectToWifiAndSetPreference(ssid, password, username = "", anonymousIdentity = "", domainSuffixMatch = "") {
-        connectToWifi(ssid, password, username, anonymousIdentity, domainSuffixMatch);
+    function connectToWifiAndSetPreference(ssid, password, username = "", anonymousIdentity = "", domainSuffixMatch = "", hidden = false) {
+        connectToWifi(ssid, password, username, anonymousIdentity, domainSuffixMatch, hidden);
         setNetworkPreference("wifi");
+    }
+
+    function canEditWifiCredentials(network) {
+        return false;
     }
 
     function toggleNetworkConnection(type) {

@@ -142,6 +142,21 @@ type ConnectionRequest struct {
 	UseSystemCACerts  *bool  `json:"useSystemCACerts,omitempty"`
 }
 
+type WiFiCredentialsConfig struct {
+	Password          *string `json:"password,omitempty"`
+	Username          *string `json:"username,omitempty"`
+	AnonymousIdentity *string `json:"anonymousIdentity,omitempty"`
+	DomainSuffixMatch *string `json:"domainSuffixMatch,omitempty"`
+	Save              *bool   `json:"save,omitempty"`
+}
+
+type WiFiConfigUpdate struct {
+	SSID        string                 `json:"ssid"`
+	Credentials *WiFiCredentialsConfig `json:"credentials,omitempty"`
+	Proxy       map[string]any         `json:"proxy,omitempty"`
+	IP          map[string]any         `json:"ip,omitempty"`
+}
+
 type WiredConnection struct {
 	Path     dbus.ObjectPath `json:"path"`
 	ID       string          `json:"id"`

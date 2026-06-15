@@ -17,6 +17,7 @@ type Backend interface {
 	DisconnectWiFi() error
 	DisconnectWiFiDevice(device string) error
 	ForgetWiFiNetwork(ssid string) error
+	UpdateWiFiConfig(update WiFiConfigUpdate) error
 	SetWiFiAutoconnect(ssid string, autoconnect bool) error
 
 	GetEthernetDevices() []EthernetDevice

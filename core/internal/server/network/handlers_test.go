@@ -38,6 +38,16 @@ func (m *mockNetConn) Close() error {
 	return nil
 }
 
+type captureConnectBackend struct {
+	Backend
+	req ConnectionRequest
+}
+
+func (b *captureConnectBackend) ConnectWiFi(req ConnectionRequest) error {
+	b.req = req
+	return nil
+}
+
 func TestRespondError_Network(t *testing.T) {
 	conn := newMockNetConn()
 	models.RespondError(conn, 123, "test error")
@@ -139,6 +149,112 @@ func TestHandleConnectWiFi(t *testing.T) {
 
 		assert.Equal(t, 123, resp.ID)
 		assert.Contains(t, resp.Error, "missing or invalid 'ssid' parameter")
+	})
+
+	t.Run("passes hidden connection flag", func(t *testing.T) {
+		backend := &captureConnectBackend{}
+		manager := NewTestManager(backend, &NetworkState{})
+
+		conn := newMockNetConn()
+		req := models.Request{
+			ID:     124,
+			Method: "network.wifi.connect",
+			Params: map[string]any{
+				"ssid":        "HiddenNetwork",
+				"password":    "secret",
+				"hidden":      true,
+				"interactive": false,
+			},
+		}
+
+		handleConnectWiFi(conn, req, manager)
+
+		var resp models.Response[models.SuccessResult]
+		err := json.NewDecoder(conn.writeBuf).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 124, resp.ID)
+		assert.Empty(t, resp.Error)
+		require.NotNil(t, resp.Result)
+		assert.True(t, resp.Result.Success)
+		assert.Equal(t, ConnectionRequest{
+			SSID:        "HiddenNetwork",
+			Password:    "secret",
+			Hidden:      true,
+			Interactive: false,
+		}, backend.req)
+	})
+}
+
+func TestParseWiFiCredentialsConfig(t *testing.T) {
+	raw := map[string]any{
+		"password":            "new-secret",
+		"username":            "alice",
+		"anonymousIdentity":   "anon",
+		"domainSuffixMatch":   "example.com",
+		"save":                true,
+		"unsupportedProperty": "ignored",
+	}
+
+	creds := parseWiFiCredentialsConfig(raw)
+	require.NotNil(t, creds)
+	require.NotNil(t, creds.Password)
+	require.NotNil(t, creds.Username)
+	require.NotNil(t, creds.AnonymousIdentity)
+	require.NotNil(t, creds.DomainSuffixMatch)
+	require.NotNil(t, creds.Save)
+	assert.Equal(t, "new-secret", *creds.Password)
+	assert.Equal(t, "alice", *creds.Username)
+	assert.Equal(t, "anon", *creds.AnonymousIdentity)
+	assert.Equal(t, "example.com", *creds.DomainSuffixMatch)
+	assert.True(t, *creds.Save)
+}
+
+func TestHandleUpdateWiFiConfigValidation(t *testing.T) {
+	t.Run("missing ssid parameter", func(t *testing.T) {
+		manager := &Manager{
+			state: &NetworkState{},
+		}
+
+		conn := newMockNetConn()
+		req := models.Request{
+			ID:     123,
+			Method: "network.wifi.updateConfig",
+			Params: map[string]any{},
+		}
+
+		handleUpdateWiFiConfig(conn, req, manager)
+
+		var resp models.Response[any]
+		err := json.NewDecoder(conn.writeBuf).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 123, resp.ID)
+		assert.Contains(t, resp.Error, "missing or invalid 'ssid' parameter")
+	})
+
+	t.Run("missing update payload", func(t *testing.T) {
+		manager := &Manager{
+			state: &NetworkState{},
+		}
+
+		conn := newMockNetConn()
+		req := models.Request{
+			ID:     124,
+			Method: "network.wifi.updateConfig",
+			Params: map[string]any{
+				"ssid": "SavedNetwork",
+			},
+		}
+
+		handleUpdateWiFiConfig(conn, req, manager)
+
+		var resp models.Response[any]
+		err := json.NewDecoder(conn.writeBuf).Decode(&resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, 124, resp.ID)
+		assert.Contains(t, resp.Error, "no WiFi configuration updates provided")
 	})
 }
 

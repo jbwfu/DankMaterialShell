@@ -1247,16 +1247,7 @@ func (b *NetworkManagerBackend) UpdateVPNConfig(connUUID string, updates map[str
 			}
 		}
 
-		if ipv4, ok := settings["ipv4"]; ok {
-			delete(ipv4, "addresses")
-			delete(ipv4, "routes")
-			delete(ipv4, "dns")
-		}
-		if ipv6, ok := settings["ipv6"]; ok {
-			delete(ipv6, "addresses")
-			delete(ipv6, "routes")
-			delete(ipv6, "dns")
-		}
+		sanitizeNetworkManagerLegacyIPSettingsForUpdate(settings)
 
 		mergeStoredSecrets(conn, settings)
 
@@ -1343,16 +1334,7 @@ func (b *NetworkManagerBackend) SetVPNCredentials(connUUID string, username stri
 			vpnSettings["secrets"] = secrets
 		}
 
-		if ipv4, ok := settings["ipv4"]; ok {
-			delete(ipv4, "addresses")
-			delete(ipv4, "routes")
-			delete(ipv4, "dns")
-		}
-		if ipv6, ok := settings["ipv6"]; ok {
-			delete(ipv6, "addresses")
-			delete(ipv6, "routes")
-			delete(ipv6, "dns")
-		}
+		sanitizeNetworkManagerLegacyIPSettingsForUpdate(settings)
 
 		mergeStoredSecrets(conn, settings)
 

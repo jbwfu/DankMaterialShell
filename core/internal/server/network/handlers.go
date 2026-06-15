@@ -25,6 +25,8 @@ func HandleRequest(conn net.Conn, req models.Request, manager *Manager) {
 		handleDisconnectWiFi(conn, req, manager)
 	case "network.wifi.forget":
 		handleForgetWiFi(conn, req, manager)
+	case "network.wifi.updateConfig":
+		handleUpdateWiFiConfig(conn, req, manager)
 	case "network.wifi.toggle":
 		handleToggleWiFi(conn, req, manager)
 	case "network.wifi.enable":
@@ -161,6 +163,7 @@ func handleConnectWiFi(conn net.Conn, req models.Request, manager *Manager) {
 	connReq.Password = params.StringOpt(req.Params, "password", "")
 	connReq.Username = params.StringOpt(req.Params, "username", "")
 	connReq.Device = params.StringOpt(req.Params, "device", "")
+	connReq.Hidden = params.BoolOpt(req.Params, "hidden", false)
 
 	if interactive, ok := models.Get[bool](req, "interactive"); ok {
 		connReq.Interactive = interactive
@@ -230,6 +233,92 @@ func handleForgetWiFi(conn net.Conn, req models.Request, manager *Manager) {
 	}
 
 	models.Respond(conn, req.ID, models.SuccessResult{Success: true, Message: "forgotten"})
+}
+
+func handleUpdateWiFiConfig(conn net.Conn, req models.Request, manager *Manager) {
+	ssid, err := params.String(req.Params, "ssid")
+	if err != nil {
+		models.RespondError(conn, req.ID, err.Error())
+		return
+	}
+
+	update := WiFiConfigUpdate{
+		SSID:  ssid,
+		Proxy: nil,
+		IP:    nil,
+	}
+
+	config, _ := params.AnyMap(req.Params, "config")
+	if credentialsRaw, ok := params.AnyMap(config, "credentials"); ok {
+		update.Credentials = parseWiFiCredentialsConfig(credentialsRaw)
+	} else if credentialsRaw, ok := params.AnyMap(req.Params, "credentials"); ok {
+		update.Credentials = parseWiFiCredentialsConfig(credentialsRaw)
+	} else {
+		creds := parseWiFiCredentialsConfig(req.Params)
+		if creds != nil {
+			update.Credentials = creds
+		}
+	}
+
+	if proxy, ok := params.AnyMap(config, "proxy"); ok {
+		update.Proxy = proxy
+	} else if proxy, ok := params.AnyMap(req.Params, "proxy"); ok {
+		update.Proxy = proxy
+	}
+
+	if ip, ok := params.AnyMap(config, "ip"); ok {
+		update.IP = ip
+	} else if ip, ok := params.AnyMap(req.Params, "ip"); ok {
+		update.IP = ip
+	}
+
+	if update.Credentials == nil && update.Proxy == nil && update.IP == nil {
+		models.RespondError(conn, req.ID, "no WiFi configuration updates provided")
+		return
+	}
+
+	if err := manager.UpdateWiFiConfig(update); err != nil {
+		models.RespondError(conn, req.ID, err.Error())
+		return
+	}
+
+	models.Respond(conn, req.ID, models.SuccessResult{Success: true, Message: "wifi configuration updated"})
+}
+
+func parseWiFiCredentialsConfig(raw map[string]any) *WiFiCredentialsConfig {
+	if raw == nil {
+		return nil
+	}
+
+	var creds WiFiCredentialsConfig
+	hasValue := false
+
+	if password, ok := raw["password"].(string); ok {
+		creds.Password = &password
+		hasValue = true
+	}
+	if username, ok := raw["username"].(string); ok {
+		creds.Username = &username
+		hasValue = true
+	}
+	if anonymousIdentity, ok := raw["anonymousIdentity"].(string); ok {
+		creds.AnonymousIdentity = &anonymousIdentity
+		hasValue = true
+	}
+	if domainSuffixMatch, ok := raw["domainSuffixMatch"].(string); ok {
+		creds.DomainSuffixMatch = &domainSuffixMatch
+		hasValue = true
+	}
+	if save, ok := raw["save"].(bool); ok {
+		creds.Save = &save
+		hasValue = true
+	}
+
+	if !hasValue {
+		return nil
+	}
+
+	return &creds
 }
 
 func handleToggleWiFi(conn net.Conn, req models.Request, manager *Manager) {

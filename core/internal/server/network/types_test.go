@@ -140,6 +140,40 @@ func TestConnectionRequest_JSON(t *testing.T) {
 	})
 }
 
+func TestWiFiConfigUpdate_JSON(t *testing.T) {
+	password := "new-secret"
+	save := true
+	update := WiFiConfigUpdate{
+		SSID: "SavedNetwork",
+		Credentials: &WiFiCredentialsConfig{
+			Password: &password,
+			Save:     &save,
+		},
+		Proxy: map[string]any{
+			"method": "none",
+		},
+		IP: map[string]any{
+			"ipv4Method": "auto",
+		},
+	}
+
+	data, err := json.Marshal(update)
+	require.NoError(t, err)
+
+	var decoded WiFiConfigUpdate
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, update.SSID, decoded.SSID)
+	require.NotNil(t, decoded.Credentials)
+	require.NotNil(t, decoded.Credentials.Password)
+	require.NotNil(t, decoded.Credentials.Save)
+	assert.Equal(t, password, *decoded.Credentials.Password)
+	assert.True(t, *decoded.Credentials.Save)
+	assert.Equal(t, "none", decoded.Proxy["method"])
+	assert.Equal(t, "auto", decoded.IP["ipv4Method"])
+}
+
 func TestPriorityUpdate_JSON(t *testing.T) {
 	update := PriorityUpdate{
 		Preference: PreferenceWiFi,

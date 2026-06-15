@@ -145,6 +145,16 @@ func (b *NetworkManagerBackend) classifyNMStateReason(reason uint32) string {
 	}
 }
 
+func shouldForgetFailedWiFiProfile(reasonCode string, preExisting bool) bool {
+	if reasonCode == errdefs.ErrUserCanceled {
+		return true
+	}
+	if preExisting {
+		return false
+	}
+	return reasonCode == errdefs.ErrBadCredentials || reasonCode == errdefs.ErrNoSuchSSID
+}
+
 func (b *NetworkManagerBackend) updateWiFiState() error {
 	if b.wifiDevice == nil {
 		return nil
@@ -186,6 +196,7 @@ func (b *NetworkManagerBackend) updateWiFiState() error {
 	b.stateMutex.RLock()
 	wasConnecting := b.state.IsConnecting
 	connectingSSID := b.state.ConnectingSSID
+	connectingPreExisting := b.state.ConnectingPreExisting
 	b.stateMutex.RUnlock()
 
 	var reasonCode string
@@ -219,6 +230,7 @@ func (b *NetworkManagerBackend) updateWiFiState() error {
 
 	wasConnecting = b.state.IsConnecting
 	connectingSSID = b.state.ConnectingSSID
+	connectingPreExisting = b.state.ConnectingPreExisting
 
 	if wasConnecting && connectingSSID != "" {
 		switch {
@@ -226,15 +238,17 @@ func (b *NetworkManagerBackend) updateWiFiState() error {
 			log.Infof("[updateWiFiState] Connection successful: %s", ssid)
 			b.state.IsConnecting = false
 			b.state.ConnectingSSID = ""
+			b.state.ConnectingPreExisting = false
 			b.state.LastError = ""
 			doneSSID = connectingSSID
 		case failed || (disconnected && !connected):
 			log.Warnf("[updateWiFiState] Connection failed: SSID=%s, state=%d", connectingSSID, state)
 			b.state.IsConnecting = false
 			b.state.ConnectingSSID = ""
+			b.state.ConnectingPreExisting = false
 			b.state.LastError = reasonCode
 
-			if reasonCode == errdefs.ErrUserCanceled {
+			if shouldForgetFailedWiFiProfile(reasonCode, connectingPreExisting) {
 				forgetSSID = connectingSSID
 			}
 

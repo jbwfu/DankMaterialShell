@@ -638,6 +638,10 @@ func (m *Manager) SetVPNCredentials(uuid, username, password string, save bool) 
 	return m.backend.SetVPNCredentials(uuid, username, password, save)
 }
 
+func (m *Manager) UpdateWiFiConfig(update WiFiConfigUpdate) error {
+	return m.backend.UpdateWiFiConfig(update)
+}
+
 func (m *Manager) SetWiFiAutoconnect(ssid string, autoconnect bool) error {
 	return m.backend.SetWiFiAutoconnect(ssid, autoconnect)
 }

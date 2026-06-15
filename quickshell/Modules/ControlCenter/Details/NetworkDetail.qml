@@ -666,6 +666,7 @@ Rectangle {
                     networkContextMenu.currentSaved = modelData.saved;
                     networkContextMenu.currentSignal = modelData.signal;
                     networkContextMenu.currentAutoconnect = modelData.autoconnect || false;
+                    networkContextMenu.currentOutOfRange = modelData.outOfRange || false;
                     networkContextMenu.popup(optionsButton, -networkContextMenu.width + optionsButton.width, optionsButton.height + Theme.spacingXS);
                 }
             }
@@ -772,10 +773,8 @@ Rectangle {
         }
     }
 
-    Menu {
+    WifiNetworkMenu {
         id: networkContextMenu
-        width: 150
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
         property string currentSSID: ""
         property bool currentSecured: false
@@ -787,111 +786,20 @@ Rectangle {
         property bool currentAutoconnect: false
 
         readonly property bool showSavedOptions: currentSaved || currentConnected
+        showNetworkInfoAction: true
 
         onClosed: {
             wifiContent.menuOpen = false;
         }
 
-        background: Rectangle {
-            color: Theme.withAlpha(Theme.surfaceContainer, Theme.popupTransparency)
-            radius: Theme.cornerRadius
-            border.width: 0
-            border.color: Qt.rgba(Theme.outline.r, Theme.outline.g, Theme.outline.b, 0.12)
+        onNetworkInfoRequested: ssid => {
+            const networkData = NetworkService.getNetworkInfo(ssid);
+            networkInfoModalLoader.active = true;
+            networkInfoModalLoader.item.showNetworkInfo(ssid, networkData);
         }
 
-        MenuItem {
-            text: networkContextMenu.currentConnecting ? I18n.tr("Connecting...") : (networkContextMenu.currentConnected ? I18n.tr("Disconnect") : I18n.tr("Connect"))
-            height: 32
-            enabled: !networkContextMenu.currentConnecting
-
-            contentItem: StyledText {
-                text: parent.text
-                font.pixelSize: Theme.fontSizeSmall
-                color: parent.enabled ? Theme.surfaceText : Theme.surfaceVariantText
-                leftPadding: Theme.spacingS
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: Rectangle {
-                color: parent.hovered ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.08) : "transparent"
-                radius: Theme.cornerRadius / 2
-            }
-
-            onTriggered: {
-                WifiConnectionActions.connectToNetworkFromDetails(networkContextMenu.currentSSID, networkContextMenu.currentSecured, networkContextMenu.currentSaved, networkContextMenu.currentEnterprise, networkContextMenu.currentConnected, {
-                    disconnectWhenConnected: true
-                });
-            }
-        }
-
-        MenuItem {
-            text: I18n.tr("Network Info")
-            height: 32
-
-            contentItem: StyledText {
-                text: parent.text
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceText
-                leftPadding: Theme.spacingS
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: Rectangle {
-                color: parent.hovered ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.08) : "transparent"
-                radius: Theme.cornerRadius / 2
-            }
-
-            onTriggered: {
-                const networkData = NetworkService.getNetworkInfo(networkContextMenu.currentSSID);
-                networkInfoModalLoader.active = true;
-                networkInfoModalLoader.item.showNetworkInfo(networkContextMenu.currentSSID, networkData);
-            }
-        }
-
-        MenuItem {
-            text: networkContextMenu.currentAutoconnect ? I18n.tr("Disable Autoconnect") : I18n.tr("Enable Autoconnect")
-            height: networkContextMenu.showSavedOptions && DMSService.apiVersion > 13 ? 32 : 0
-            visible: networkContextMenu.showSavedOptions && DMSService.apiVersion > 13
-
-            contentItem: StyledText {
-                text: parent.text
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.surfaceText
-                leftPadding: Theme.spacingS
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: Rectangle {
-                color: parent.hovered ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.08) : "transparent"
-                radius: Theme.cornerRadius / 2
-            }
-
-            onTriggered: {
-                NetworkService.setWifiAutoconnect(networkContextMenu.currentSSID, !networkContextMenu.currentAutoconnect);
-            }
-        }
-
-        MenuItem {
-            text: I18n.tr("Forget Network")
-            height: networkContextMenu.showSavedOptions ? 32 : 0
-            visible: networkContextMenu.showSavedOptions
-
-            contentItem: StyledText {
-                text: parent.text
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.error
-                leftPadding: Theme.spacingS
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: Rectangle {
-                color: parent.hovered ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.08) : "transparent"
-                radius: Theme.cornerRadius / 2
-            }
-
-            onTriggered: {
-                NetworkService.forgetWifiNetwork(networkContextMenu.currentSSID);
-            }
+        onForgetRequested: ssid => {
+            NetworkService.forgetWifiNetwork(ssid);
         }
     }
 

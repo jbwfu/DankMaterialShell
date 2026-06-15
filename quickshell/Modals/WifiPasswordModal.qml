@@ -28,6 +28,7 @@ DankModal {
     property string wifiDomainInput: ""
 
     property bool isPromptMode: false
+    property bool isEditMode: false
     property string promptToken: ""
     property string promptReason: ""
     property var promptFields: []
@@ -44,7 +45,32 @@ DankModal {
     readonly property bool showPasswordField: fieldsInfo.length === 0
     readonly property bool showAnonField: requiresEnterprise && !isVpnPrompt
     readonly property bool showDomainField: requiresEnterprise && !isVpnPrompt
-    readonly property bool showSavePasswordCheckbox: (isVpnPrompt || fieldsInfo.length > 0) && promptReason !== "pkcs11"
+    readonly property bool showSavePasswordCheckbox: promptReason !== "pkcs11" && !isEditMode && isVpnPrompt
+    readonly property bool hasPasswordInput: passwordInput.text.length > 0
+    readonly property bool canSubmit: {
+        if (fieldsInfo.length > 0) {
+            for (var i = 0; i < fieldsInfo.length; i++) {
+                if (!fieldsInfo[i].isSecret)
+                    continue;
+                const fieldName = fieldsInfo[i].name;
+                if (!secretValues[fieldName] || secretValues[fieldName].length === 0)
+                    return false;
+            }
+            return true;
+        }
+        if (isVpnPrompt)
+            return hasPasswordInput;
+        if (isEditMode)
+            return requiresEnterprise ? (usernameInput.text.length > 0 && hasPasswordInput) : hasPasswordInput;
+        if (isHiddenNetwork) {
+            if (ssidInput.text.length === 0)
+                return false;
+            if (requiresEnterprise)
+                return usernameInput.text.length > 0 && hasPasswordInput;
+            return true;
+        }
+        return requiresEnterprise ? (usernameInput.text.length > 0 && hasPasswordInput) : hasPasswordInput;
+    }
 
     readonly property int inputFieldHeight: Theme.fontSizeMedium + Theme.spacingL * 2
     readonly property int inputFieldWithSpacing: inputFieldHeight + Theme.spacingM
@@ -97,6 +123,7 @@ DankModal {
         wifiAnonymousIdentityInput = "";
         wifiDomainInput = "";
         isPromptMode = false;
+        isEditMode = false;
         isHiddenNetwork = false;
         promptToken = "";
         promptReason = "";
@@ -116,6 +143,35 @@ DankModal {
         Qt.callLater(focusFirstField);
     }
 
+    function showEditForNetwork(network) {
+        const ssid = network?.ssid || "";
+        wifiPasswordSSID = ssid;
+        wifiPasswordInput = "";
+        wifiUsernameInput = "";
+        wifiAnonymousIdentityInput = "";
+        wifiDomainInput = "";
+        isPromptMode = false;
+        isEditMode = true;
+        isHiddenNetwork = false;
+        promptToken = "";
+        promptReason = "";
+        promptFields = [];
+        promptSetting = "";
+        isVpnPrompt = false;
+        connectionName = "";
+        vpnServiceType = "";
+        connectionType = "";
+        fieldsInfo = [];
+        secretValues = {};
+
+        const knownNetwork = network?.enterprise !== undefined ? network : NetworkService.wifiNetworks.find(n => n.ssid === ssid) || NetworkService.savedWifiNetworks.find(n => n.ssid === ssid);
+        requiresEnterprise = knownNetwork?.enterprise || false;
+        savePasswordCheckbox.checked = true;
+
+        open();
+        Qt.callLater(focusFirstField);
+    }
+
     function showHidden() {
         wifiPasswordSSID = "";
         wifiPasswordInput = "";
@@ -123,6 +179,7 @@ DankModal {
         wifiAnonymousIdentityInput = "";
         wifiDomainInput = "";
         isPromptMode = false;
+        isEditMode = false;
         isHiddenNetwork = true;
         promptToken = "";
         promptReason = "";
@@ -142,6 +199,7 @@ DankModal {
 
     function showFromPrompt(token, ssid, setting, fields, hints, reason, connType, connName, vpnService, fInfo) {
         isPromptMode = true;
+        isEditMode = false;
         promptToken = token;
         promptReason = reason;
         promptFields = fields || [];
@@ -154,7 +212,7 @@ DankModal {
 
         isVpnPrompt = (connectionType === "vpn" || connectionType === "wireguard");
         wifiPasswordSSID = isVpnPrompt ? connectionName : ssid;
-        savePasswordCheckbox.checked = !isVpnPrompt;
+        savePasswordCheckbox.checked = false;
 
         requiresEnterprise = setting === "802-1x";
 
@@ -200,7 +258,21 @@ DankModal {
         }
     }
 
+    function isWifiPasswordOnlyPrompt() {
+        if (isVpnPrompt || requiresEnterprise || fieldsInfo.length === 0)
+            return false;
+        for (var i = 0; i < fieldsInfo.length; i++) {
+            const fieldName = fieldsInfo[i].name;
+            if (fieldName !== "psk" && fieldName !== "password")
+                return false;
+        }
+        return true;
+    }
+
     function submitCredentialsAndClose() {
+        if (!canSubmit)
+            return;
+
         if (fieldsInfo.length > 0) {
             NetworkService.submitCredentials(promptToken, secretValues, savePasswordCheckbox.checked);
             hide();
@@ -208,7 +280,20 @@ DankModal {
             return;
         }
 
-        if (isPromptMode) {
+        if (isEditMode) {
+            const credentials = {
+                password: passwordInput.text,
+                save: true
+            };
+            if (requiresEnterprise) {
+                credentials.username = usernameInput.text;
+                credentials.anonymousIdentity = wifiAnonymousIdentityInput;
+                credentials.domainSuffixMatch = wifiDomainInput;
+            }
+            NetworkService.updateWifiConfig(wifiPasswordSSID, {
+                credentials: credentials
+            });
+        } else if (isPromptMode) {
             const secrets = {};
             if (isVpnPrompt) {
                 if (passwordInput.text)
@@ -263,6 +348,7 @@ DankModal {
         wifiAnonymousIdentityInput = "";
         wifiDomainInput = "";
         secretValues = {};
+        isEditMode = false;
         passwordInput.text = "";
         usernameInput.text = "";
         anonInput.text = "";
@@ -326,6 +412,8 @@ DankModal {
                                     return I18n.tr("Smartcard Authentication");
                                 if (isVpnPrompt)
                                     return I18n.tr("Connect to VPN");
+                                if (isEditMode)
+                                    return I18n.tr("Wi-Fi Settings");
                                 if (isHiddenNetwork)
                                     return I18n.tr("Connect to Hidden Network");
                                 return I18n.tr("Connect to Wi-Fi");
@@ -343,10 +431,14 @@ DankModal {
                                 text: {
                                     if (promptReason === "pkcs11")
                                         return I18n.tr("Enter PIN for ") + wifiPasswordSSID;
+                                    if (isWifiPasswordOnlyPrompt())
+                                        return I18n.tr("Enter password for ") + wifiPasswordSSID;
                                     if (fieldsInfo.length > 0)
                                         return I18n.tr("Enter credentials for ") + wifiPasswordSSID;
                                     if (isVpnPrompt)
                                         return I18n.tr("Enter password for ") + wifiPasswordSSID;
+                                    if (isEditMode)
+                                        return I18n.tr("Edit password for ") + wifiPasswordSSID;
                                     if (isHiddenNetwork)
                                         return I18n.tr("Enter network name and password");
                                     const prefix = requiresEnterprise ? I18n.tr("Enter credentials for ") : I18n.tr("Enter password for ");
@@ -536,7 +628,7 @@ DankModal {
                     text: wifiPasswordInput
                     showPasswordToggle: true
                     echoMode: passwordVisible ? TextInput.Normal : TextInput.Password
-                    placeholderText: (requiresEnterprise && !isVpnPrompt) ? I18n.tr("Password") : ""
+                    placeholderText: (isEditMode || (requiresEnterprise && !isVpnPrompt)) ? I18n.tr("Password") : ""
                     backgroundColor: "transparent"
                     enabled: root.shouldBeVisible
                     keyNavigationTab: (requiresEnterprise && !isVpnPrompt) ? anonInput : null
@@ -694,29 +786,13 @@ DankModal {
                         height: 36
                         radius: Theme.cornerRadius
                         color: connectArea.containsMouse ? Qt.darker(Theme.primary, 1.1) : Theme.primary
-                        enabled: {
-                            if (fieldsInfo.length > 0) {
-                                for (var i = 0; i < fieldsInfo.length; i++) {
-                                    if (!fieldsInfo[i].isSecret)
-                                        continue;
-                                    const fieldName = fieldsInfo[i].name;
-                                    if (!secretValues[fieldName] || secretValues[fieldName].length === 0)
-                                        return false;
-                                }
-                                return true;
-                            }
-                            if (isVpnPrompt)
-                                return passwordInput.text.length > 0;
-                            if (isHiddenNetwork)
-                                return ssidInput.text.length > 0;
-                            return requiresEnterprise ? (usernameInput.text.length > 0 && passwordInput.text.length > 0) : passwordInput.text.length > 0;
-                        }
+                        enabled: canSubmit
                         opacity: enabled ? 1 : 0.5
 
                         StyledText {
                             id: connectText
                             anchors.centerIn: parent
-                            text: I18n.tr("Connect")
+                            text: isEditMode ? I18n.tr("Save") : I18n.tr("Connect")
                             font.pixelSize: Theme.fontSizeMedium
                             color: Theme.background
                             font.weight: Font.Medium

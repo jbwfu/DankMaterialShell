@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/AvengeMedia/DankMaterialShell/core/internal/log"
 	"github.com/Wifx/gonetworkmanager/v2"
@@ -393,6 +394,169 @@ func (b *NetworkManagerBackend) ForgetWiFiNetwork(ssid string) error {
 	}
 
 	return nil
+}
+
+func (b *NetworkManagerBackend) UpdateWiFiConfig(update WiFiConfigUpdate) error {
+	if update.SSID == "" {
+		return fmt.Errorf("ssid is required")
+	}
+	if update.Proxy != nil || update.IP != nil {
+		return fmt.Errorf("WiFi proxy and IP configuration are not supported yet")
+	}
+	if update.Credentials == nil {
+		return fmt.Errorf("WiFi credentials update is required")
+	}
+
+	conn, err := b.findConnection(update.SSID)
+	if err != nil {
+		return fmt.Errorf("connection not found: %w", err)
+	}
+
+	settings, err := conn.GetSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get connection settings: %w", err)
+	}
+
+	if err := applyNetworkManagerWiFiCredentials(settings, update.Credentials); err != nil {
+		return err
+	}
+
+	sanitizeNetworkManagerLegacyIPSettingsForUpdate(settings)
+
+	if err := conn.Update(settings); err != nil {
+		return fmt.Errorf("failed to update WiFi configuration: %w", err)
+	}
+
+	if _, err := b.updateWiFiNetworks(); err != nil {
+		log.Warnf("[UpdateWiFiConfig] Failed to refresh WiFi networks: %v", err)
+	}
+
+	if b.onStateChange != nil {
+		b.onStateChange()
+	}
+
+	return nil
+}
+
+func applyNetworkManagerWiFiCredentials(settings map[string]map[string]any, creds *WiFiCredentialsConfig) error {
+	if creds == nil {
+		return fmt.Errorf("WiFi credentials update is required")
+	}
+
+	saveSecrets := true
+	if creds.Save != nil {
+		saveSecrets = *creds.Save
+	}
+
+	const nmSecretFlagNone = uint32(0)
+	const nmSecretFlagNotSaved = uint32(2)
+	secretFlags := nmSecretFlagNone
+	if !saveSecrets {
+		secretFlags = nmSecretFlagNotSaved
+	}
+
+	if dot1x, ok := settings["802-1x"]; ok {
+		if creds.Username != nil {
+			if *creds.Username == "" {
+				delete(dot1x, "identity")
+			} else {
+				dot1x["identity"] = *creds.Username
+			}
+		}
+		if creds.Password != nil {
+			dot1x["password"] = *creds.Password
+			dot1x["password-flags"] = secretFlags
+		}
+		if creds.AnonymousIdentity != nil {
+			if *creds.AnonymousIdentity == "" {
+				delete(dot1x, "anonymous-identity")
+			} else {
+				dot1x["anonymous-identity"] = *creds.AnonymousIdentity
+			}
+		}
+		if creds.DomainSuffixMatch != nil {
+			if *creds.DomainSuffixMatch == "" {
+				delete(dot1x, "domain-suffix-match")
+			} else {
+				dot1x["domain-suffix-match"] = *creds.DomainSuffixMatch
+			}
+		}
+		settings["802-1x"] = dot1x
+		return nil
+	}
+
+	sec, ok := settings["802-11-wireless-security"]
+	if !ok {
+		return fmt.Errorf("saved WiFi network has no wireless security settings")
+	}
+
+	keyMgmt, _ := sec["key-mgmt"].(string)
+	switch keyMgmt {
+	case "wpa-psk", "wpa-psk-sae", "":
+		if creds.Password == nil {
+			return fmt.Errorf("password is required for this WiFi credentials update")
+		}
+		if !isValidNetworkManagerWPAPSK(*creds.Password) {
+			return fmt.Errorf("WPA password must be 8-63 characters, or exactly 64 hexadecimal characters")
+		}
+		sec["psk"] = *creds.Password
+		sec["psk-flags"] = secretFlags
+		settings["802-11-wireless-security"] = sec
+		return nil
+	case "sae":
+		if creds.Password == nil {
+			return fmt.Errorf("password is required for this WiFi credentials update")
+		}
+		sec["psk"] = *creds.Password
+		sec["psk-flags"] = secretFlags
+		settings["802-11-wireless-security"] = sec
+		return nil
+	case "wpa-eap", "ieee8021x":
+		dot1x := settings["802-1x"]
+		if dot1x == nil {
+			dot1x = map[string]any{}
+		}
+		if creds.Username != nil {
+			if *creds.Username == "" {
+				delete(dot1x, "identity")
+			} else {
+				dot1x["identity"] = *creds.Username
+			}
+		}
+		if creds.Password != nil {
+			dot1x["password"] = *creds.Password
+			dot1x["password-flags"] = secretFlags
+		}
+		if creds.AnonymousIdentity != nil {
+			if *creds.AnonymousIdentity == "" {
+				delete(dot1x, "anonymous-identity")
+			} else {
+				dot1x["anonymous-identity"] = *creds.AnonymousIdentity
+			}
+		}
+		if creds.DomainSuffixMatch != nil {
+			if *creds.DomainSuffixMatch == "" {
+				delete(dot1x, "domain-suffix-match")
+			} else {
+				dot1x["domain-suffix-match"] = *creds.DomainSuffixMatch
+			}
+		}
+		settings["802-1x"] = dot1x
+		return nil
+	default:
+		return fmt.Errorf("WiFi credential update is not supported for key management %q", keyMgmt)
+	}
+}
+
+func isValidNetworkManagerWPAPSK(psk string) bool {
+	length := len(psk)
+	if length < 8 || length > 64 {
+		return false
+	}
+	if length == 64 {
+		return strings.Trim(psk, "0123456789abcdefABCDEF") == ""
+	}
+	return true
 }
 
 func getSavedWiFiProfiles(connections []gonetworkmanager.Connection) map[string]savedWiFiProfile {
@@ -944,17 +1108,7 @@ func (b *NetworkManagerBackend) SetWiFiAutoconnect(ssid string, autoconnect bool
 		return fmt.Errorf("connection metadata not found")
 	}
 
-	if ipv4, ok := settings["ipv4"]; ok {
-		delete(ipv4, "addresses")
-		delete(ipv4, "routes")
-		delete(ipv4, "dns")
-	}
-
-	if ipv6, ok := settings["ipv6"]; ok {
-		delete(ipv6, "addresses")
-		delete(ipv6, "routes")
-		delete(ipv6, "dns")
-	}
+	sanitizeNetworkManagerLegacyIPSettingsForUpdate(settings)
 
 	mergeStoredSecrets(conn, settings)
 

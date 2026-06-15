@@ -101,6 +101,32 @@ func TestSortWiFiNetworks(t *testing.T) {
 	})
 }
 
+func TestReplaceIWDPassphrase(t *testing.T) {
+	t.Run("replaces existing passphrase", func(t *testing.T) {
+		updated, err := replaceIWDPassphrase("[Security]\nPassphrase=old\n[Settings]\nAutoConnect=true\n", "new-secret")
+		assert.NoError(t, err)
+		assert.Equal(t, "[Security]\nPassphrase=new-secret\n[Settings]\nAutoConnect=true\n", updated)
+	})
+
+	t.Run("adds missing passphrase to security section", func(t *testing.T) {
+		updated, err := replaceIWDPassphrase("[Security]\nPreSharedKey=abc\n[Settings]\nAutoConnect=true\n", "new-secret")
+		assert.NoError(t, err)
+		assert.Equal(t, "[Security]\nPassphrase=new-secret\n[Settings]\nAutoConnect=true\n", updated)
+	})
+
+	t.Run("removes old pre-shared key when passphrase already exists", func(t *testing.T) {
+		updated, err := replaceIWDPassphrase("[Security]\nPreSharedKey=abc\nPassphrase=old\n[Settings]\nAutoConnect=true\n", "new-secret")
+		assert.NoError(t, err)
+		assert.Equal(t, "[Security]\nPassphrase=new-secret\n[Settings]\nAutoConnect=true\n", updated)
+	})
+
+	t.Run("requires security section", func(t *testing.T) {
+		_, err := replaceIWDPassphrase("[Settings]\nAutoConnect=true\n", "new-secret")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no [Security] section")
+	})
+}
+
 func TestManager_GetWiFiNetworks(t *testing.T) {
 	manager := &Manager{
 		state: &NetworkState{

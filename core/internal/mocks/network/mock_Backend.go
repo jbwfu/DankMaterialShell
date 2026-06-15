@@ -2055,6 +2055,52 @@ func (_c *MockBackend_SubmitCredentials_Call) RunAndReturn(run func(token string
 	return _c
 }
 
+// UpdateWiFiConfig provides a mock function with given fields: update
+func (_m *MockBackend) UpdateWiFiConfig(update network.WiFiConfigUpdate) error {
+	ret := _m.Called(update)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateWiFiConfig")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(network.WiFiConfigUpdate) error); ok {
+		r0 = rf(update)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockBackend_UpdateWiFiConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateWiFiConfig'
+type MockBackend_UpdateWiFiConfig_Call struct {
+	*mock.Call
+}
+
+// UpdateWiFiConfig is a helper method to define mock.On call
+//   - update network.WiFiConfigUpdate
+func (_e *MockBackend_Expecter) UpdateWiFiConfig(update any) *MockBackend_UpdateWiFiConfig_Call {
+	return &MockBackend_UpdateWiFiConfig_Call{Call: _e.mock.On("UpdateWiFiConfig", update)}
+}
+
+func (_c *MockBackend_UpdateWiFiConfig_Call) Run(run func(update network.WiFiConfigUpdate)) *MockBackend_UpdateWiFiConfig_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(network.WiFiConfigUpdate))
+	})
+	return _c
+}
+
+func (_c *MockBackend_UpdateWiFiConfig_Call) Return(_a0 error) *MockBackend_UpdateWiFiConfig_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockBackend_UpdateWiFiConfig_Call) RunAndReturn(run func(network.WiFiConfigUpdate) error) *MockBackend_UpdateWiFiConfig_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateVPNConfig provides a mock function for the type MockBackend
 func (_mock *MockBackend) UpdateVPNConfig(uuid string, updates map[string]any) error {
 	ret := _mock.Called(uuid, updates)

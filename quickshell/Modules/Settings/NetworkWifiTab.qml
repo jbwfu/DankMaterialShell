@@ -196,7 +196,7 @@ Item {
                             DankActionButton {
                                 iconName: "wifi_find"
                                 buttonSize: 32
-                                visible: NetworkService.backend === "networkmanager" && NetworkService.wifiEnabled && !NetworkService.wifiToggling
+                                visible: WifiConnectionActions.canConnectHiddenNetwork() && NetworkService.wifiEnabled && !NetworkService.wifiToggling
                                 onClicked: PopoutService.showHiddenNetworkModal()
                             }
 
@@ -667,12 +667,16 @@ Item {
                                                 }
 
                                                 DankActionButton {
-                                                    iconName: "delete"
+                                                    id: wifiNetworkMoreButton
+                                                    iconName: "more_horiz"
                                                     buttonSize: 28
-                                                    iconColor: Theme.error
                                                     visible: modelData.saved || isConnected
                                                     onClicked: {
-                                                        root.showForgetNetworkConfirm(modelData.ssid);
+                                                        if (wifiNetworkMenu.visible) {
+                                                            wifiNetworkMenu.close();
+                                                            return;
+                                                        }
+                                                        wifiNetworkMenu.popup(wifiNetworkMoreButton, -wifiNetworkMenu.width + wifiNetworkMoreButton.width, wifiNetworkMoreButton.height + Theme.spacingXS);
                                                     }
                                                 }
                                             }
@@ -813,7 +817,7 @@ Item {
 
                                                     Row {
                                                         spacing: Theme.spacingS
-                                                        visible: (modelData.saved || isConnected) && DMSService.apiVersion > 13
+                                                        visible: WifiConnectionActions.canToggleAutoconnect(modelData)
 
                                                         DankToggle {
                                                             id: autoconnectToggle
@@ -826,6 +830,23 @@ Item {
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+
+                                    WifiNetworkMenu {
+                                        id: wifiNetworkMenu
+
+                                        currentSSID: modelData.ssid || ""
+                                        currentSecured: modelData.secured || false
+                                        currentEnterprise: modelData.enterprise || false
+                                        currentConnected: isConnected
+                                        currentSaved: modelData.saved || false
+                                        currentSignal: modelData.signal || 0
+                                        currentAutoconnect: modelData.autoconnect || false
+                                        currentOutOfRange: modelData.outOfRange || false
+
+                                        onForgetRequested: ssid => {
+                                            root.showForgetNetworkConfirm(ssid);
                                         }
                                     }
                                 }
@@ -1176,87 +1197,20 @@ Item {
                                 }
                             }
 
-                            Menu {
+                            WifiNetworkMenu {
                                 id: savedWifiMenu
-                                width: 170
-                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
-                                background: Rectangle {
-                                    color: Theme.withAlpha(Theme.surfaceContainer, Theme.popupTransparency)
-                                    radius: Theme.cornerRadius
-                                    border.width: 0
-                                }
+                                currentSSID: modelData.ssid || ""
+                                currentSecured: modelData.secured || false
+                                currentEnterprise: modelData.enterprise || false
+                                currentConnected: isConnected
+                                currentSaved: true
+                                currentSignal: modelData.signal || 0
+                                currentAutoconnect: modelData.autoconnect || false
+                                currentOutOfRange: isOutOfRange
 
-                                MenuItem {
-                                    text: isConnecting ? I18n.tr("Connecting...") : (isConnected ? I18n.tr("Disconnect") : I18n.tr("Connect"))
-                                    height: isOutOfRange ? 0 : 32
-                                    visible: !isOutOfRange
-                                    enabled: !isConnecting
-
-                                    contentItem: StyledText {
-                                        text: parent.text
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: parent.enabled ? Theme.surfaceText : Theme.surfaceVariantText
-                                        leftPadding: Theme.spacingS
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    background: Rectangle {
-                                        color: parent.hovered ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.08) : "transparent"
-                                        radius: Theme.cornerRadius / 2
-                                    }
-
-                                    onTriggered: {
-                                        WifiConnectionActions.connectToNetwork(modelData, {
-                                            connected: isConnected,
-                                            disconnectWhenConnected: true
-                                        });
-                                    }
-                                }
-
-                                MenuItem {
-                                    text: modelData.autoconnect ? I18n.tr("Disable Autoconnect") : I18n.tr("Enable Autoconnect")
-                                    height: DMSService.apiVersion > 13 ? 32 : 0
-                                    visible: DMSService.apiVersion > 13
-
-                                    contentItem: StyledText {
-                                        text: parent.text
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: Theme.surfaceText
-                                        leftPadding: Theme.spacingS
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    background: Rectangle {
-                                        color: parent.hovered ? Qt.rgba(Theme.primary.r, Theme.primary.g, Theme.primary.b, 0.08) : "transparent"
-                                        radius: Theme.cornerRadius / 2
-                                    }
-
-                                    onTriggered: {
-                                        NetworkService.setWifiAutoconnect(modelData.ssid, !(modelData.autoconnect || false));
-                                    }
-                                }
-
-                                MenuItem {
-                                    text: I18n.tr("Forget Network")
-                                    height: 32
-
-                                    contentItem: StyledText {
-                                        text: parent.text
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: Theme.error
-                                        leftPadding: Theme.spacingS
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    background: Rectangle {
-                                        color: parent.hovered ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.08) : "transparent"
-                                        radius: Theme.cornerRadius / 2
-                                    }
-
-                                    onTriggered: {
-                                        root.showForgetNetworkConfirm(modelData.ssid);
-                                    }
+                                onForgetRequested: ssid => {
+                                    root.showForgetNetworkConfirm(ssid);
                                 }
                             }
                         }

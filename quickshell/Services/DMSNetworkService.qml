@@ -76,6 +76,10 @@ Singleton {
     property bool autoRefreshEnabled: false
     property string wifiPassword: ""
     property string forgetSSID: ""
+    property bool wifiConfigUpdating: false
+    property string wifiConfigUpdateSSID: ""
+    readonly property bool supportsHiddenWifiConnect: networkAvailable && backend === "networkmanager"
+    readonly property bool supportsWifiAutoconnect: networkAvailable && DMSService.apiVersion > 13
 
     property var vpnProfiles: []
     property var vpnActive: []
@@ -635,6 +639,31 @@ Singleton {
         });
     }
 
+    function updateWifiConfig(ssid, config) {
+        if (!networkAvailable)
+            return;
+        if (!ssid)
+            return;
+
+        wifiConfigUpdating = true;
+        wifiConfigUpdateSSID = ssid;
+
+        DMSService.sendRequest("network.wifi.updateConfig", {
+            ssid: ssid,
+            config: config || {}
+        }, response => {
+            wifiConfigUpdating = false;
+            wifiConfigUpdateSSID = "";
+            if (response.error) {
+                ToastService.showError(I18n.tr("Failed to update WiFi settings"), response.error);
+                return;
+            }
+
+            ToastService.showInfo(I18n.tr("WiFi settings updated"));
+            Qt.callLater(() => getState());
+        });
+    }
+
     function toggleWifiRadio() {
         if (!networkAvailable || wifiToggling)
             return;
@@ -1025,5 +1054,15 @@ Singleton {
             return;
 
         getState();
+    }
+
+    function canEditWifiCredentials(network) {
+        if (!network || !(network.saved ?? false) || !(network.secured ?? false))
+            return false;
+        if (backend === "networkmanager")
+            return true;
+        if (backend === "iwd" || backend === "iwd+networkd")
+            return !(network.enterprise ?? false);
+        return false;
     }
 }

@@ -165,6 +165,125 @@ func TestNetworkManagerBackend_IsConnectingTo_NotConnecting(t *testing.T) {
 	assert.False(t, backend.IsConnectingTo("TestNetwork"))
 }
 
+func TestApplyNetworkManagerWiFiCredentials_PSK(t *testing.T) {
+	password := "new-secret"
+	save := true
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt":  "wpa-psk",
+			"psk-flags": uint32(2),
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Password: &password,
+		Save:     &save,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, password, settings["802-11-wireless-security"]["psk"])
+	assert.Equal(t, uint32(0), settings["802-11-wireless-security"]["psk-flags"])
+}
+
+func TestApplyNetworkManagerWiFiCredentials_PSKRejectsInvalidPassword(t *testing.T) {
+	password := "short"
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt":  "wpa-psk",
+			"psk":       "old-secret",
+			"psk-flags": uint32(0),
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Password: &password,
+	})
+
+	assert.ErrorContains(t, err, "WPA password must be 8-63 characters")
+	assert.Equal(t, "old-secret", settings["802-11-wireless-security"]["psk"])
+}
+
+func TestApplyNetworkManagerWiFiCredentials_PSKAccepts64HexKey(t *testing.T) {
+	password := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt":  "wpa-psk",
+			"psk-flags": uint32(2),
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Password: &password,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, password, settings["802-11-wireless-security"]["psk"])
+}
+
+func TestApplyNetworkManagerWiFiCredentials_PSKRejects64NonHexPassword(t *testing.T) {
+	password := "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt": "wpa-psk",
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Password: &password,
+	})
+
+	assert.ErrorContains(t, err, "WPA password must be 8-63 characters")
+	assert.NotContains(t, settings["802-11-wireless-security"], "psk")
+}
+
+func TestApplyNetworkManagerWiFiCredentials_SAEAllowsShortPassword(t *testing.T) {
+	password := "short"
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt":  "sae",
+			"psk-flags": uint32(2),
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Password: &password,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, password, settings["802-11-wireless-security"]["psk"])
+}
+
+func TestApplyNetworkManagerWiFiCredentials_Enterprise(t *testing.T) {
+	username := "alice"
+	password := "new-secret"
+	anon := "anon"
+	domain := "example.com"
+	save := true
+	settings := map[string]map[string]any{
+		"802-11-wireless-security": {
+			"key-mgmt": "wpa-eap",
+		},
+		"802-1x": {
+			"eap": []string{"peap"},
+		},
+	}
+
+	err := applyNetworkManagerWiFiCredentials(settings, &WiFiCredentialsConfig{
+		Username:          &username,
+		Password:          &password,
+		AnonymousIdentity: &anon,
+		DomainSuffixMatch: &domain,
+		Save:              &save,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, username, settings["802-1x"]["identity"])
+	assert.Equal(t, password, settings["802-1x"]["password"])
+	assert.Equal(t, anon, settings["802-1x"]["anonymous-identity"])
+	assert.Equal(t, domain, settings["802-1x"]["domain-suffix-match"])
+	assert.Equal(t, uint32(0), settings["802-1x"]["password-flags"])
+}
+
 func TestNetworkManagerBackend_UpdateWiFiNetworks_NoDevice(t *testing.T) {
 	mockNM := mock_gonetworkmanager.NewMockNetworkManager(t)
 
